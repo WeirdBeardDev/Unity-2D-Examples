@@ -7,6 +7,13 @@ using SpaceMonkeys.Core;
 
 namespace SpaceMonkeys.UI
 {
+    /// <summary>
+    /// A script that you drop on a child object to the "window" GameObject you want to move around.
+    /// </summary>
+    /// <remarks>
+    /// Find the GitHub code at https://github.com/WeirdBeardDev/Unity-2D-Examples.
+    /// Find the specific file at https://github.com/WeirdBeardDev/Unity-2D-Examples/blob/master/Assets/_Game/Scripts/UI/DragWindow.cs.
+    /// </remarks>
     public class DragWindow : MonoBehaviour, IDragHandler, IPointerDownHandler, IPointerUpHandler
     {
         #region Members
