@@ -7,12 +7,10 @@ using SpaceMonkeys.Core;
 
 namespace SpaceMonkeys.UI
 {
-    public class DragWindow : MonoBehaviour, IDragHandler, IBeginDragHandler, IEndDragHandler, IPointerDownHandler, IInitializePotentialDragHandler
+    public class DragWindow : MonoBehaviour, IDragHandler, IPointerDownHandler, IPointerUpHandler
     {
         #region Members
         [Header("References")]
-        [SerializeField] private Canvas _canvas = default;
-        [SerializeField] private RectTransform _windowRectTransform = default;
         [SerializeField] private Image _contentImage = default;
         [SerializeField] [Range(0f, 1f)] private float _contentImageAlpha = .4f;
 
@@ -20,99 +18,101 @@ namespace SpaceMonkeys.UI
         [SerializeField] private bool _clampToScreen = true;
         [SerializeField] private bool _useOffScreenToClose = false;
         [SerializeField] private float _allowedOffset = 250f;
+
+        private RectTransform _panelRT;
+        private RectTransform _dragAreaRT;
+        private Vector2 _originalLocalPointerPos;
         #endregion Members
 
         #region MonoBehaviours
         void Awake()
         {
-            if (_windowRectTransform == null)
-            {
-                _windowRectTransform = transform.parent.GetComponent<RectTransform>();
-            }
-            if (_canvas == null)
-            {
-                _canvas = gameObject.FindInParents<Canvas>(transform.parent.gameObject);
-            }
+            _panelRT = transform.parent as RectTransform;
+            _dragAreaRT = gameObject.FindInParents<Canvas>(transform.parent.gameObject).gameObject.GetComponent<RectTransform>();
         }
         #endregion MonoBehaviours
 
         #region Interface Implementations
-        public void OnInitializePotentialDrag(PointerEventData eventData) => OriginalPosition = _windowRectTransform.position;
-        public void OnBeginDrag(PointerEventData eventData) => ChangeAlpha(_contentImage, _contentImageAlpha);
-        public void OnDrag(PointerEventData eventData)
+        public void OnPointerDown(PointerEventData data)
         {
-            if (_windowRectTransform is null || _canvas is null) return;
-            _windowRectTransform.anchoredPosition += eventData.delta / _canvas.scaleFactor;
-            if (_clampToScreen)
-                _windowRectTransform.position = _useOffScreenToClose ? ClampToScreen(_allowedOffset) : ClampToScreen();
+            _panelRT.SetAsLastSibling();
+            OriginalPosition = _panelRT.localPosition;
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(_dragAreaRT, data.position, data.pressEventCamera, out _originalLocalPointerPos);
+            ChangeAlpha();
         }
-        public void OnEndDrag(PointerEventData eventData)
+        public void OnDrag(PointerEventData data)
         {
-            ChangeAlpha(_contentImage, 1f);
-            if (!IsWindowFullyOnScreen())
+            if (_panelRT == null || _dragAreaRT == null) return;
+
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(_dragAreaRT, data.position, data.pressEventCamera, out Vector2 localPointerPos))
             {
-                DeactivateWindow();
-                _windowRectTransform.position = OriginalPosition;
+                Vector3 offsetToOriginal = localPointerPos - _originalLocalPointerPos;
+                _panelRT.localPosition = OriginalPosition + offsetToOriginal;
+            }
+            if (_clampToScreen)
+                _panelRT.localPosition = _useOffScreenToClose ? ClampToScreen(_allowedOffset) : ClampToScreen();
+        }
+        public void OnPointerUp(PointerEventData data)
+        {
+            ChangeAlpha();
+            if (!IsFullyOnScreen)
+            {
+                _panelRT.gameObject.SetActive(false);
+                _panelRT.localPosition = OriginalPosition;
             }
         }
-        public void OnPointerDown(PointerEventData eventData) => _windowRectTransform.SetAsLastSibling();
         #endregion Interface Implementations
 
         #region Properties
         public Vector3 OriginalPosition { get; private set; }
+        public bool IsFullyOnScreen
+        {
+            get
+            {
+                bool ans = true;
+                Vector3[] worldCorners = new Vector3[4];
+                _panelRT.GetWorldCorners(worldCorners);
+
+                ans &= !(worldCorners[0].x < 0);
+                ans &= !(worldCorners[2].x > Screen.width);
+                ans &= !(worldCorners[0].y < 0);
+                ans &= !(worldCorners[2].y > Screen.height);
+
+                return ans;
+            }
+        }
+
         #endregion Properties
 
         #region Helpers
-        private void ChangeAlpha(Image background, float alpha)
+        private void ChangeAlpha()
         {
-            if (background != null)
+            if (_contentImage != null)
             {
-                Color bg = background.color;
-                bg.a = alpha;
-                background.color = bg;
+                Color bg = _contentImage.color;
+                switch (bg.a)
+                {
+                    case 1f:
+                        bg.a = _contentImageAlpha;
+                        break;
+                    default:
+                        bg.a = 1f;
+                        break;
+                }
+                _contentImage.color = bg;
             }
         }
         private Vector3 ClampToScreen() => ClampToScreen(0f);
-        private Vector3 ClampToScreen(float windowOffset)
+        private Vector3 ClampToScreen(float offset)
         {
-            Vector3 ans = new Vector3();
-            var rt = _windowRectTransform;
-            Vector2 scale = new Vector2(rt.lossyScale.x, rt.lossyScale.y);
-            float adjHeight, adjWidth;
-            adjWidth = (rt.rect.width * rt.anchorMax.x * scale.x) - (windowOffset * scale.x);
-            adjHeight = (rt.rect.height * (1 - rt.anchorMax.y) * scale.y) - (windowOffset * scale.y);
+            Vector3 pos = _panelRT.localPosition;
+            Vector3 minPos = _dragAreaRT.rect.min - _panelRT.rect.min;
+            Vector3 maxPos = _dragAreaRT.rect.max - _panelRT.rect.max;
 
-            ans.x = Mathf.Clamp(rt.position.x, adjWidth + .01f, Screen.width - adjWidth);
-            ans.y = Mathf.Clamp(rt.position.y, adjHeight + .01f, Screen.height - adjHeight);
-            ans.z = rt.position.z;
+            pos.x = Mathf.Clamp(_panelRT.localPosition.x, minPos.x - offset, maxPos.x + offset);
+            pos.y = Mathf.Clamp(_panelRT.localPosition.y, minPos.y - offset, maxPos.y + offset);
 
-            return ans;
-        }
-        private bool IsWindowFullyOnScreen()
-        {
-            bool ans = true;
-            var rt = _windowRectTransform;
-            Vector3[] worldCorners = new Vector3[4];
-            rt.GetWorldCorners(worldCorners);
-
-            ans &= !(worldCorners[0].x < 0);
-            ans &= !(worldCorners[2].x > Screen.width);
-            ans &= !(worldCorners[0].y < 0);
-            ans &= !(worldCorners[2].y > Screen.height);
-
-            return ans;
-        }
-        private void DeactivateWindow() => _windowRectTransform.gameObject.SetActive(false);
-        private void PrintScreenStats(string prefix) => print($"{prefix} - Resolution: {Screen.currentResolution}");
-        private void PrintWindowLocation(string prefix)
-        {
-            // Vector3[] localCorners = new Vector3[4];
-            Vector3[] fourCorners = new Vector3[4];
-            // _windowRectTransform.GetLocalCorners(localCorners);
-            _windowRectTransform.GetWorldCorners(fourCorners);
-            // print($"{prefix} - Local Window top left: ({localCorners[1].x},{localCorners[1].y})");
-            print($"{prefix} - World Window top left: ({fourCorners[1].x}, {fourCorners[1].y})");
-            print($"{prefix} - World Window bottom left: ({fourCorners[0].x}, {fourCorners[0].y})");
+            return pos;
         }
         #endregion Helpers
 
