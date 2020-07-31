@@ -1,0 +1,32 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace SpaceMonkeys.Idle.DungeonExplorer
+{
+    public class #SCRIPTNAME# : MonoBehaviour
+    {
+        #region Members
+        #endregion Members
+        
+        #region MonoBehaviours
+        void Start()
+        {
+            #NOTRIM#
+        }
+        void Update()
+        {
+            #NOTRIM#
+        }
+        #endregion MonoBehaviours
+
+        #region Properties
+        #endregion Properties
+
+        #region Methods
+        #endregion Methods
+
+        #region Helpers
+        #endregion Helpers
+    }
+}
